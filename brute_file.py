@@ -7,6 +7,7 @@ import time
 import requests
 import MySQLdb
 import re
+import sys
 
 #x=open("test.db").readlines()
 #print x
@@ -15,6 +16,7 @@ configure option
 '''
 HOSTS_FILE="hosts"
 SENSITIVE_FILE="directory_small"
+TABLE_NAME="defaultx"
 hosts=open(HOSTS_FILE).readlines()
 files=open(SENSITIVE_FILE).readlines()
 requests.adapters.DEFAULT_RETRIES = 3
@@ -73,8 +75,11 @@ def http_to_database(req_uri,r,flag):
 	    cur=conn.cursor()
 	     
 	    conn.select_db('fuzz_http')
-	    #cur.execute('create table iqiyi(req_uri varchar(80),res_title varchar(100),res_status_code varchar(5),res_reason varchar(20),res_headers varchar(1000),res_text varchar(1000000),flag int(1))')
-	    cur.execute('insert into iqiyi(req_uri,res_title,res_status_code,res_reason,res_headers,res_text,flag) values(%s,%s,%s,%s,%s,%s,%s)',(req_uri,get_title(r),r.status_code,r.reason,r.headers,r.text[:400],flag))
+	    cur.execute("select count(*) from information_schema.tables where table_name like %s",(TABLE_NAME))
+	    tablerows=cur.fetchall()
+	    if tablerows[0][0]!=1:
+	    	cur.execute('create table '+TABLE_NAME+'(req_uri varchar(80),res_title varchar(100),res_status_code varchar(5),res_reason varchar(20),res_headers varchar(1000),res_text varchar(1000),flag int(1))')
+	    cur.execute('insert into '+TABLE_NAME+'(req_uri,res_title,res_status_code,res_reason,res_headers,res_text,flag) values(%s,%s,%s,%s,%s,%s,%s)',(req_uri,get_title(r),r.status_code,r.reason,r.headers,r.text[:400],flag))
 	    conn.commit()
 	    conn.close()
     except Exception,e:
@@ -145,14 +150,17 @@ def do_job(args):
     	r=fuzz_response(hosts[args[0]].strip("\r").strip("\n"),file.strip("\r").strip("\n")
 )
 	flag=fuzz_filter(file.strip("\r").strip("\n"),r)
-	if flag!=0:
+	if flag==0:
 	   http_to_database(hosts[args[0]].strip("\r").strip("\n")+"/"+file.strip("\r").strip("\n")
 ,r,flag)
 	   print hosts[args[0]].strip("\r").strip("\n")+"/"+file.strip("\r").strip("\n")
 
 if __name__ == '__main__':
+    if len(sys.argv)==2:
+        print sys.argv[1]
+        TABLE_NAME=sys.argv[1]
     start = time.time()
-    work_manager =  WorkManager(len(hosts), 1000)
+    work_manager =  WorkManager(len(hosts), 100)
     work_manager.wait_allcomplete()
     end = time.time()
     print "cost all time: %s" % (end-start)
